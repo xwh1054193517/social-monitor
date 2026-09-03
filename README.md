@@ -299,4 +299,4 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 
 ## License
 
-Private（当前未开放许可证）。
+本项目基于 [MIT License](LICENSE) 开源。
