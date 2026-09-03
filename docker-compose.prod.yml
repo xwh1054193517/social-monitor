@@ -17,14 +17,18 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: "3001"
-      DATABASE_URL: postgresql://${DB_USER:-social_monitor}:${DB_PASSWORD:-102jikluo}@${DB_HOST:-host.docker.internal}:${DB_PORT:-5432}/${DB_NAME:-social_monitor}
+      # 口令不设默认值：未在 .env.production 中配置时 compose 直接报错中止，
+      # 既避免口令进入版本库，也防止空口令静默连库
+      DATABASE_URL: postgresql://${DB_USER:-social_monitor}:${DB_PASSWORD:?DB_PASSWORD is required, set it in .env.production}@${DB_HOST:-host.docker.internal}:${DB_PORT:-5432}/${DB_NAME:-social_monitor}
       REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
       REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-102jikluo}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required, set it in .env.production}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      QQ_APP_ID: ${QQ_APP_ID:-}
+      QQ_APP_SECRET: ${QQ_APP_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
