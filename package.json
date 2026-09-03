@@ -1,0 +1,39 @@
+{
+  "name": "social-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @social-monitor/api --filter @social-monitor/web dev",
+    "dev:api": "pnpm --filter @social-monitor/api dev",
+    "dev:web": "pnpm --filter @social-monitor/web dev",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "eslint": "9.39.1",
+    "prettier": "3.7.4",
+    "prisma": "6.19.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp"
+    ]
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@social-monitor/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "lint": "eslint src --ext .ts",
+    "test": "echo \"No tests for @social-monitor/types yet\"",
+    "build": "tsc -p tsconfig.json"
+  }
+}

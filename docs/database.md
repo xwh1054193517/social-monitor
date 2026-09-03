@@ -1,0 +1,344 @@
+# Database Schema
+
+## Prisma Schema
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MonitorType {
+  X_USER
+  TG_CHANNEL
+  TG_GROUP
+}
+
+enum MessageSource {
+  X
+  TELEGRAM
+}
+
+enum NotificationChannelType {
+  TELEGRAM
+  WECHAT
+  QQ
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model MonitorTarget {
+  id String @id @default(cuid())
+
+  type MonitorType
+
+  name String
+
+  /**
+   * X username:
+   * OpenAI
+   *
+   * Telegram username:
+   * openai_news
+   *
+   * Private group may not have username.
+   */
+  username String?
+
+  /**
+   * X user id or Telegram chat id.
+   */
+  externalId String
+
+  enabled Boolean @default(true)
+
+  /**
+   * X polling cursor.
+   *
+   * Telegram does not use this field.
+   */
+  lastCursor String?
+
+  /**
+   * Last successfully processed message time.
+   */
+  lastMessageAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@unique([type, externalId])
+
+  @@index([enabled, type])
+}
+
+model Message {
+  id String @id @default(cuid())
+
+  source MessageSource
+
+  /**
+   * X:
+   * tweet id
+   *
+   * Telegram:
+   * chatId:messageId
+   *
+   * Example:
+   * -100123456789:123
+   */
+  externalId String
+
+  targetId String
+
+  authorExternalId String?
+
+  authorUsername String?
+
+  authorName String?
+
+  /**
+   * Only text content.
+   *
+   * No image/video/media data.
+   */
+  content String @db.Text
+
+  /**
+   * Original X / Telegram message URL.
+   */
+  url String?
+
+  publishedAt DateTime
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  target MonitorTarget @relation(
+    fields: [targetId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  notificationTasks NotificationTask[]
+
+  @@unique([source, externalId])
+
+  @@index([targetId, publishedAt])
+
+  @@index([source, publishedAt])
+
+  @@index([publishedAt])
+}
+
+model NotificationChannel {
+  id String @id @default(cuid())
+
+  name String
+
+  type NotificationChannelType
+
+  enabled Boolean @default(true)
+
+  /**
+   * Encrypted configuration.
+   *
+   * Telegram:
+   * {
+   *   botToken: "...",
+   *   chatId: "..."
+   * }
+   *
+   * WeChat:
+   * {
+   *   webhookUrl: "..."
+   * }
+   */
+  config Json
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  tasks NotificationTask[]
+}
+
+model NotificationTask {
+  id String @id @default(cuid())
+
+  messageId String
+
+  channelId String
+
+  status NotificationStatus @default(PENDING)
+
+  attempts Int @default(0)
+
+  lastError String?
+
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  message Message @relation(
+    fields: [messageId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  channel NotificationChannel @relation(
+    fields: [channelId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@unique([messageId, channelId])
+
+  @@index([status, createdAt])
+
+  @@index([channelId, status])
+}
+
+model TelegramAccount {
+  id String @id @default(cuid())
+
+  /**
+   * Telegram phone number.
+   */
+  phone String
+
+  /**
+   * AES-256-GCM encrypted StringSession.
+   */
+  session String @db.Text
+
+  connected Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+model AppSetting {
+  id String @id @default(cuid())
+
+  key String @unique
+
+  value Json
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+```
+
+---
+
+## Database Design Principles
+
+### Message
+
+Message 是整个系统最重要的数据实体。
+
+关系：
+
+```text
+MonitorTarget
+      │
+      └── Message
+```
+
+一个 MonitorTarget 可以产生多个 Message。
+
+---
+
+### Notification
+
+```text
+Message
+   │
+   └── NotificationTask
+             │
+             └── NotificationChannel
+```
+
+一个消息可以发送到多个通知渠道。
+
+例如：
+
+```text
+Message
+ ├── Telegram Bot
+ ├── WeChat
+ └── QQ
+```
+
+---
+
+### Notification Routing
+
+```text
+Message
+   │
+   └── enabled NotificationChannel
+             │
+             └── NotificationTask
+```
+
+消息保存成功后，系统为所有启用的通知渠道创建通知任务。
+
+---
+
+## Media Policy
+
+数据库 Schema 中故意不存在：
+
+```text
+MessageMedia
+media
+images
+videos
+attachments
+fileId
+objectStorageKey
+```
+
+整个 MVP 不保存媒体数据。
+
+---
+
+## Migration
+
+初始化：
+
+```bash
+pnpm prisma migrate dev --name init
+```
+
+生成 Client：
+
+```bash
+pnpm prisma generate
+```
+
+生产环境：
+
+```bash
+pnpm prisma migrate deploy
+```
