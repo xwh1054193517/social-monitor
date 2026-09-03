@@ -296,6 +296,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - [`docs/Social Monitor API.md`](docs/Social%20Monitor%20API.md) — 完整 API 说明
 - [`docs/database.md`](docs/database.md) — 数据库设计
 - [`docs/phase.md`](docs/phase.md) — 分阶段开发规划
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — 贡献指南
 
 ## License
 
