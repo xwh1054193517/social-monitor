@@ -46,13 +46,17 @@ services:
     container_name: sm-telegram-worker
     restart: unless-stopped
     environment:
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
-      # Push captured messages into the NestJS ingest endpoint
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:?TELEGRAM_API_ID is required, set it in .env.production}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?TELEGRAM_API_HASH is required, set it in .env.production}
+      # Push captured messages into the NestJS ingest endpoint (overrides the
+      # worker.py default of http://localhost:3001/... since inside the
+      # compose network the api service is reachable at http://api:3001).
       TELEGRAM_INGEST_URL: http://api:3001/api/internal/telegram/ingest
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET is required, set it in .env.production}
       TELEGRAM_WORKER_HOST: 0.0.0.0
       TELEGRAM_WORKER_PORT: "9400"
+      # Connect timeout for the Telethon session bootstrap (seconds).
+      TELEGRAM_CONNECT_TIMEOUT: ${TELEGRAM_CONNECT_TIMEOUT:-20}
     # No host port — reached only by the api service over the compose network.
 
   web:
