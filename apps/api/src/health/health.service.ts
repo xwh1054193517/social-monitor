@@ -21,8 +21,9 @@ export interface HealthOverview {
 
 /**
  * Aggregates dependency health for the /health endpoint. PostgreSQL/Redis are
- * probed live; Telegram reflects the in-memory client registry. X and WeChat
- * are out of MVP scope, so they always report `not_configured`.
+ * probed live; Telegram reflects the Python sidecar (telegram-worker)
+ * liveness, since the user clients now live there. X and WeChat are out of
+ * MVP scope, so they always report `not_configured`.
  */
 @Injectable()
 export class HealthService {
@@ -69,13 +70,15 @@ export class HealthService {
     }
   }
 
-  checkTelegram(): HealthStatus {
+  async checkTelegram(): Promise<HealthStatus> {
     const apiId = this.config.get<string>("TELEGRAM_API_ID", "0");
     const apiHash = this.config.get<string>("TELEGRAM_API_HASH", "");
     if (!apiId || apiId === "0" || !apiHash) {
       return "not_configured";
     }
-    return this.clients.getActiveClient() ? "up" : "down";
+    // The Telegram user clients live in the Python sidecar (telegram-worker);
+    // its liveness decides whether the collector is considered up.
+    return (await this.clients.isHealthy()) ? "up" : "down";
   }
 
   checkTelegramBot(): HealthStatus {
@@ -93,9 +96,10 @@ export class HealthService {
   }
 
   async overview(): Promise<HealthOverview> {
-    const [postgresql, redis] = await Promise.all([
+    const [postgresql, redis, telegram] = await Promise.all([
       this.checkDatabase(),
-      this.checkRedis()
+      this.checkRedis(),
+      this.checkTelegram()
     ]);
 
     return {
@@ -104,7 +108,7 @@ export class HealthService {
       checks: {
         postgresql,
         redis,
-        telegram: this.checkTelegram(),
+        telegram,
         x: this.checkX(),
         telegram_bot: this.checkTelegramBot(),
         wechat: this.checkWeChat()

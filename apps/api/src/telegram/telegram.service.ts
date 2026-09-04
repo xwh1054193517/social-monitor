@@ -1,21 +1,14 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger
-} from "@nestjs/common";
-import { Api } from "telegram";
+import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { apiData } from "@social-monitor/shared";
 import { EncryptionService } from "../crypto/encryption.service";
 import { TelegramAccountRepository } from "./telegram-account.repository";
-import { TelegramClientManager } from "./telegram-client-manager.service";
+import {
+  TelegramClientManager,
+  TelegramDialogDto
+} from "./telegram-client-manager.service";
 import { TelegramListener } from "./telegram-listener";
 
-export interface TelegramDialogDto {
-  id: string;
-  title: string;
-  username: string | null;
-  type: "user" | "group" | "channel" | "megagroup";
-}
+export type { TelegramDialogDto };
 
 @Injectable()
 export class TelegramService {
@@ -29,38 +22,26 @@ export class TelegramService {
   ) {}
 
   async getStatus() {
-    const phone = this.clients.getCurrentPhone();
-    const connected = phone != null && this.clients.isConnected(phone);
-    return apiData({ connected, phone: connected ? phone : null });
+    const status = await this.clients.getStatus();
+    return apiData({
+      connected: status.connected,
+      phone: status.connected ? status.phone : null
+    });
   }
 
   async getDialogs() {
-    const client = this.requireActiveClient();
-    const dialogs = await client.getDialogs({});
-    return apiData(dialogs.map((dialog) => this.toDialogDto(dialog)));
+    await this.requireConnected();
+    return apiData(await this.clients.fetchDialogs());
   }
 
   async getChannels() {
-    const client = this.requireActiveClient();
-    const dialogs = await client.getDialogs({});
-    const channels = dialogs.filter(
-      (dialog) =>
-        dialog.isChannel &&
-        dialog.entity instanceof Api.Channel &&
-        !dialog.entity.megagroup
-    );
-    return apiData(channels.map((dialog) => this.toDialogDto(dialog)));
+    await this.requireConnected();
+    return apiData(await this.clients.fetchChannels());
   }
 
   async getGroups() {
-    const client = this.requireActiveClient();
-    const dialogs = await client.getDialogs({});
-    const groups = dialogs.filter(
-      (dialog) =>
-        dialog.isGroup ||
-        (dialog.entity instanceof Api.Channel && dialog.entity.megagroup === true)
-    );
-    return apiData(groups.map((dialog) => this.toDialogDto(dialog)));
+    await this.requireConnected();
+    return apiData(await this.clients.fetchGroups());
   }
 
   async reconnect() {
@@ -73,7 +54,7 @@ export class TelegramService {
         code: "TELEGRAM_NO_ACCOUNT"
       });
     }
-    // Reconnect the most recently persisted account.
+    // Reconnect the most recently persisted account via the Python sidecar.
     try {
       const session = this.encryption.decrypt(account.session);
       await this.clients.connectWithSession(account.phone, session);
@@ -97,7 +78,7 @@ export class TelegramService {
     }
     const phone = account.phone;
 
-    // Disconnect client and remove from registry.
+    // Disconnect the sidecar client.
     try {
       await this.clients.disconnect(phone);
     } catch (error) {
@@ -114,42 +95,15 @@ export class TelegramService {
     return apiData({ disconnected: true, phone });
   }
 
-  private requireActiveClient() {
-    const client = this.clients.getActiveClient();
-    if (!client) {
+  private async requireConnected(): Promise<void> {
+    const status = await this.clients.getStatus();
+    if (!status.connected) {
       throw new ConflictException({
         statusCode: 409,
-        message: "No active Telegram session. Login first via /api/telegram/login.",
+        message:
+          "No active Telegram session. Login first via /api/telegram/login.",
         code: "TELEGRAM_NOT_CONNECTED"
       });
     }
-    return client;
-  }
-
-  private toDialogDto(dialog: {
-    id?: { toString(): string } | null;
-    title?: string;
-    entity?: unknown;
-  }): TelegramDialogDto {
-    const entity = dialog.entity;
-    let type: TelegramDialogDto["type"] = "user";
-    let username: string | null = null;
-
-    if (entity instanceof Api.Channel) {
-      type = entity.megagroup ? "megagroup" : "channel";
-      username = entity.username ?? null;
-    } else if (entity instanceof Api.Chat) {
-      type = "group";
-    } else if (entity instanceof Api.User) {
-      type = "user";
-      username = entity.username ?? null;
-    }
-
-    return {
-      id: dialog.id?.toString() ?? "",
-      title: dialog.title ?? "",
-      username,
-      type
-    };
   }
 }

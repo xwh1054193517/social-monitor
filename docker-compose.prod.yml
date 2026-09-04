@@ -34,7 +34,26 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_TTL_SECONDS: ${AUTH_TTL_SECONDS:-2592000}
+      # Python Telegram sidecar (telegram-worker service below)
+      TELEGRAM_SIDECAR_URL: http://telegram-worker:9400
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET is required, set it in .env.production}
     # No host port — reached only through the nginx reverse proxy.
+
+  telegram-worker:
+    build:
+      context: .
+      dockerfile: apps/telegram-worker/Dockerfile
+    container_name: sm-telegram-worker
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      # Push captured messages into the NestJS ingest endpoint
+      TELEGRAM_INGEST_URL: http://api:3001/api/internal/telegram/ingest
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?INTERNAL_API_SECRET is required, set it in .env.production}
+      TELEGRAM_WORKER_HOST: 0.0.0.0
+      TELEGRAM_WORKER_PORT: "9400"
+    # No host port — reached only by the api service over the compose network.
 
   web:
     build:

@@ -1,53 +1,34 @@
 import { ConflictException } from "@nestjs/common";
-import { Api } from "telegram";
 import { EncryptionService } from "../crypto/encryption.service";
 import { TelegramAccountRepository } from "./telegram-account.repository";
 import { TelegramClientManager } from "./telegram-client-manager.service";
 import { TelegramListener } from "./telegram-listener";
 import { TelegramService } from "./telegram.service";
 
-function makeChannel(overrides: Record<string, unknown> = {}): Api.Channel {
-  const channel = Object.create(Api.Channel.prototype) as Api.Channel;
-  channel.id = { toString: () => "-1001" } as never;
-  channel.title = "Channel Title";
-  channel.username = "chan";
-  channel.megagroup = false;
-  Object.assign(channel, overrides);
-  return channel;
-}
-
-function makeDialog(
-  entity: Api.User | Api.Chat | Api.Channel,
-  flags: { isChannel?: boolean; isGroup?: boolean } = {}
-) {
-  return {
-    id: { toString: () => (entity as { id?: { toString(): string } }).id?.toString() ?? "0" },
-    title: (entity as { title?: string }).title ?? "Title",
-    entity,
-    ...flags
-  };
-}
-
 describe("TelegramService", () => {
   let service: TelegramService;
   let clients: {
-    getCurrentPhone: jest.Mock;
-    isConnected: jest.Mock;
-    getActiveClient: jest.Mock;
+    getStatus: jest.Mock;
+    fetchDialogs: jest.Mock;
+    fetchChannels: jest.Mock;
+    fetchGroups: jest.Mock;
     connectWithSession: jest.Mock;
+    disconnect: jest.Mock;
   };
-  let accounts: { findConnected: jest.Mock };
+  let accounts: { findConnected: jest.Mock; update: jest.Mock };
   let encryption: { decrypt: jest.Mock };
   let listener: { startFor: jest.Mock };
 
   beforeEach(() => {
     clients = {
-      getCurrentPhone: jest.fn(),
-      isConnected: jest.fn(),
-      getActiveClient: jest.fn(),
-      connectWithSession: jest.fn()
+      getStatus: jest.fn(),
+      fetchDialogs: jest.fn(),
+      fetchChannels: jest.fn(),
+      fetchGroups: jest.fn(),
+      connectWithSession: jest.fn(),
+      disconnect: jest.fn()
     };
-    accounts = { findConnected: jest.fn() };
+    accounts = { findConnected: jest.fn(), update: jest.fn() };
     encryption = { decrypt: jest.fn((v) => `dec:${v}`) };
     listener = { startFor: jest.fn() };
 
@@ -60,7 +41,7 @@ describe("TelegramService", () => {
   });
 
   it("reports disconnected when no account is active", async () => {
-    clients.getCurrentPhone.mockReturnValue(null);
+    clients.getStatus.mockResolvedValue({ phone: null, connected: false });
 
     const result = await service.getStatus();
 
@@ -68,8 +49,10 @@ describe("TelegramService", () => {
   });
 
   it("reports connected with the current phone", async () => {
-    clients.getCurrentPhone.mockReturnValue("13800000000");
-    clients.isConnected.mockReturnValue(true);
+    clients.getStatus.mockResolvedValue({
+      phone: "13800000000",
+      connected: true
+    });
 
     const result = await service.getStatus();
 
@@ -78,28 +61,37 @@ describe("TelegramService", () => {
     });
   });
 
-  it("throws when listing dialogs without an active client", async () => {
-    clients.getActiveClient.mockReturnValue(null);
+  it("throws when listing dialogs without an active session", async () => {
+    clients.getStatus.mockResolvedValue({ phone: null, connected: false });
 
     await expect(service.getDialogs()).rejects.toBeInstanceOf(
       ConflictException
     );
   });
 
-  it("filters channels from dialogs", async () => {
-    const channel = makeChannel();
-    const megagroup = makeChannel({
-      megagroup: true,
-      title: "Megagroup",
-      username: "mega"
+  it("returns dialogs fetched from the sidecar", async () => {
+    clients.getStatus.mockResolvedValue({
+      phone: "13800000000",
+      connected: true
     });
-    const client = {
-      getDialogs: jest.fn().mockResolvedValue([
-        makeDialog(channel, { isChannel: true }),
-        makeDialog(megagroup, { isChannel: true })
-      ])
-    };
-    clients.getActiveClient.mockReturnValue(client);
+    clients.fetchDialogs.mockResolvedValue([
+      { id: "-1001", title: "Channel Title", username: "chan", type: "channel" }
+    ]);
+
+    const result = await service.getDialogs();
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({ id: "-1001", type: "channel" });
+  });
+
+  it("returns channels fetched from the sidecar", async () => {
+    clients.getStatus.mockResolvedValue({
+      phone: "13800000000",
+      connected: true
+    });
+    clients.fetchChannels.mockResolvedValue([
+      { id: "-1001", title: "Channel Title", username: "chan", type: "channel" }
+    ]);
 
     const result = await service.getChannels();
 
@@ -107,20 +99,14 @@ describe("TelegramService", () => {
     expect(result.data[0]).toMatchObject({ id: "-1001", type: "channel" });
   });
 
-  it("includes megagroups in groups", async () => {
-    const channel = makeChannel();
-    const megagroup = makeChannel({
-      megagroup: true,
-      title: "Megagroup",
-      username: "mega"
+  it("returns groups fetched from the sidecar", async () => {
+    clients.getStatus.mockResolvedValue({
+      phone: "13800000000",
+      connected: true
     });
-    const client = {
-      getDialogs: jest.fn().mockResolvedValue([
-        makeDialog(channel, { isChannel: true }),
-        makeDialog(megagroup, { isChannel: true })
-      ])
-    };
-    clients.getActiveClient.mockReturnValue(client);
+    clients.fetchGroups.mockResolvedValue([
+      { id: "-1002", title: "Megagroup", username: "mega", type: "megagroup" }
+    ]);
 
     const result = await service.getGroups();
 
@@ -132,7 +118,7 @@ describe("TelegramService", () => {
     accounts.findConnected.mockResolvedValue([
       { phone: "13800000000", session: "encrypted-session" }
     ]);
-    clients.connectWithSession.mockResolvedValue({ connected: true });
+    clients.connectWithSession.mockResolvedValue(undefined);
 
     const result = await service.reconnect();
 
@@ -151,5 +137,24 @@ describe("TelegramService", () => {
     accounts.findConnected.mockResolvedValue([]);
 
     await expect(service.reconnect()).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("disconnects the sidecar client and clears the session on logout", async () => {
+    accounts.findConnected.mockResolvedValue([
+      { id: "a_1", phone: "13800000000", session: "encrypted-session" }
+    ]);
+    clients.disconnect.mockResolvedValue(undefined);
+    accounts.update.mockResolvedValue(undefined);
+
+    const result = await service.logout();
+
+    expect(clients.disconnect).toHaveBeenCalledWith("13800000000");
+    expect(accounts.update).toHaveBeenCalledWith("a_1", {
+      connected: false,
+      session: ""
+    });
+    expect(result).toEqual({
+      data: { disconnected: true, phone: "13800000000" }
+    });
   });
 });

@@ -4,6 +4,7 @@ import { MessageModule } from "../messages/message.module";
 import { TelegramAccountRepository } from "./telegram-account.repository";
 import { TelegramAuthService } from "./telegram-auth.service";
 import { TelegramClientManager } from "./telegram-client-manager.service";
+import { TelegramIngestController } from "./telegram-ingest.controller";
 import { TelegramController } from "./telegram.controller";
 import { TelegramListener } from "./telegram-listener";
 import { TelegramMapper } from "./telegram-mapper";
@@ -11,7 +12,7 @@ import { TelegramService } from "./telegram.service";
 
 @Module({
   imports: [CryptoModule, MessageModule],
-  controllers: [TelegramController],
+  controllers: [TelegramController, TelegramIngestController],
   providers: [
     TelegramAccountRepository,
     TelegramClientManager,

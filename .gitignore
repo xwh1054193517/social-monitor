@@ -53,3 +53,7 @@ env
 # Temporary files
 # ============================================================
 _tmp_*
+
+# Python sidecar
+__pycache__/
+apps/telegram-worker/.venv/

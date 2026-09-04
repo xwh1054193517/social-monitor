@@ -51,11 +51,12 @@ describe("TelegramAuthService", () => {
   });
 
   it("persists the session after a successful code submit", async () => {
-    clients.submitCode.mockResolvedValue(undefined);
-    clients.saveSession.mockReturnValue("saved-session");
+    clients.submitCode.mockResolvedValue({ passwordRequired: false });
+    clients.saveSession.mockResolvedValue("saved-session");
 
     const result = await service.submitCode({ phone: "13800000000", code: "12345" });
 
+    expect(clients.saveSession).toHaveBeenCalledWith("13800000000");
     expect(encryption.encrypt).toHaveBeenCalledWith("saved-session");
     expect(accounts.upsert).toHaveBeenCalledWith(
       "13800000000",
@@ -69,15 +70,12 @@ describe("TelegramAuthService", () => {
   });
 
   it("returns passwordRequired when the account has 2FA", async () => {
-    const err = new Error("SESSION_PASSWORD_NEEDED");
-    clients.submitCode.mockRejectedValue(err);
-    jest
-      .spyOn(TelegramClientManager, "isPasswordNeeded")
-      .mockReturnValue(true);
+    clients.submitCode.mockResolvedValue({ passwordRequired: true });
 
     const result = await service.submitCode({ phone: "13800000000", code: "1" });
 
     expect(accounts.upsert).not.toHaveBeenCalled();
+    expect(clients.saveSession).not.toHaveBeenCalled();
     expect(result).toEqual({
       data: { phone: "13800000000", passwordRequired: true }
     });
@@ -85,7 +83,7 @@ describe("TelegramAuthService", () => {
 
   it("persists the session after a successful password submit", async () => {
     clients.submitPassword.mockResolvedValue(undefined);
-    clients.saveSession.mockReturnValue("pw-session");
+    clients.saveSession.mockResolvedValue("pw-session");
 
     const result = await service.submitPassword({
       phone: "13800000000",

@@ -1,15 +1,18 @@
 import { MonitorTarget } from "@prisma/client";
-import { Api } from "telegram";
-import { TelegramMapper } from "./telegram-mapper";
+import {
+  RawTelegramMessage,
+  RawTelegramSender,
+  TelegramMapper
+} from "./telegram-mapper";
 
-function makeUser(overrides: Record<string, unknown> = {}): Api.User {
-  const user = Object.create(Api.User.prototype) as Api.User;
-  user.id = { toString: () => "123456" } as never;
-  user.firstName = "John";
-  user.lastName = "Doe";
-  user.username = "johndoe";
-  Object.assign(user, overrides);
-  return user;
+function makeSender(overrides: Partial<RawTelegramSender> = {}): RawTelegramSender {
+  return {
+    id: "123456",
+    username: "johndoe",
+    firstName: "John",
+    lastName: "Doe",
+    ...overrides
+  };
 }
 
 function makeTarget(): MonitorTarget {
@@ -21,15 +24,17 @@ function makeTarget(): MonitorTarget {
   } as MonitorTarget;
 }
 
-function makeMessage(overrides: Record<string, unknown> = {}): Api.Message {
+function makeMessage(
+  overrides: Partial<RawTelegramMessage> = {}
+): RawTelegramMessage {
   return {
-    message: "hello world",
-    chatId: { toString: () => "-100123456789" },
+    chatId: "-100123456789",
+    messageId: 42,
+    content: "hello world",
     date: 1700000000,
-    id: 42,
-    sender: makeUser(),
+    sender: makeSender(),
     ...overrides
-  } as unknown as Api.Message;
+  };
 }
 
 describe("TelegramMapper", () => {
@@ -61,7 +66,7 @@ describe("TelegramMapper", () => {
     expect(result.publishedAt).toEqual(new Date(1700000000 * 1000));
   });
 
-  it("drops the author when the sender is not a User", () => {
+  it("drops the author when the sender is missing", () => {
     const target = makeTarget();
     const message = makeMessage({ sender: undefined });
 
@@ -72,7 +77,7 @@ describe("TelegramMapper", () => {
 
   it("falls back to an empty string for media-only messages", () => {
     const target = makeTarget();
-    const message = makeMessage({ message: undefined });
+    const message = makeMessage({ content: null });
 
     const result = mapper.toNormalizedMessage(target, message, "x:1");
 

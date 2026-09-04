@@ -39,13 +39,14 @@ export class TelegramAuthService {
 
   async submitCode(dto: LoginCodeDto) {
     const phone = this.normalizePhone(dto.phone);
+    let passwordRequired: boolean;
     try {
-      await this.clients.submitCode(phone, dto.code);
+      ({ passwordRequired } = await this.clients.submitCode(phone, dto.code));
     } catch (error) {
-      if (TelegramClientManager.isPasswordNeeded(error)) {
-        return apiData({ phone, passwordRequired: true });
-      }
       throw this.toHttpError(error);
+    }
+    if (passwordRequired) {
+      return apiData({ phone, passwordRequired: true });
     }
     await this.persistSession(phone);
     return apiData({ phone, connected: true });
@@ -63,7 +64,7 @@ export class TelegramAuthService {
   }
 
   private async persistSession(phone: string): Promise<void> {
-    const session = this.clients.saveSession(phone);
+    const session = await this.clients.saveSession(phone);
     const encrypted = this.encryption.encrypt(session);
     await this.accounts.upsert(phone, encrypted, true);
     this.listener.startFor(phone);
